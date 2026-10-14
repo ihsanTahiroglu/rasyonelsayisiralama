@@ -1,0 +1,2123 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rasyonel Sayılar: Hassas Kalibrasyon ve Karşılaştırma Laboratuvarı</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Nunito', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    @keyframes fallDown {
+      0% {
+        transform: translateY(-12vh) rotate(-8deg) scale(0.95);
+        opacity: 0;
+      }
+      12% {
+        opacity: 0.85;
+      }
+      50% {
+        transform: translateY(45vh) rotate(8deg) scale(1.05);
+      }
+      88% {
+        opacity: 0.85;
+      }
+      100% {
+        transform: translateY(108vh) rotate(-6deg) scale(0.95);
+        opacity: 0;
+      }
+    }
+    @keyframes magnifyPopFromInterval {
+      0% {
+        opacity: 0;
+        transform: scale(0.06);
+      }
+      70% {
+        opacity: 1;
+        transform: scale(1.03);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+    .magnify-modal-animate {
+      animation: magnifyPopFromInterval 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    .floating-math-item {
+      position: fixed;
+      top: -60px;
+      pointer-events: none;
+      z-index: 1;
+      animation-name: fallDown;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+    }
+    .btn-3d {
+      transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-3d:active:not(:disabled) {
+      transform: translateY(3px);
+    }
+    /* Custom scrollbar for number lines */
+    ::-webkit-scrollbar {
+      height: 8px;
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(224, 242, 254, 0.6);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.4);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.7);
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-sky-100 via-pink-50 to-amber-100 text-slate-800 relative overflow-x-hidden selection:bg-pink-300 selection:text-slate-900">
+
+  <!-- YUKARIDAN AŞAĞIYA SÜZÜLEN RASYONEL SAYI & MATEMATİK SEMBOLLERİ -->
+  <div id="floating-symbols-container" class="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true"></div>
+
+  <!-- ANA UYGULAMA KAPSAYICISI -->
+  <div id="app-root" class="relative z-10 max-w-6xl mx-auto px-2.5 sm:px-6 py-3 sm:py-5 space-y-4 sm:space-y-5"></div>
+
+  <!-- BÜYÜTEÇ VE REHBER MODAL KAPSAYICISI -->
+  <div id="modal-root"></div>
+
+  <script>
+    // ============================================================================
+    // 1. WEB AUDIO API OYUN SES EFEKTLERİ MOTORU (Harici Dosya Gerektirmez)
+    // ============================================================================
+    function playSoundEffect(type) {
+      if (!state.soundEnabled || typeof window === 'undefined') return;
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const now = ctx.currentTime;
+
+        const createOsc = (freq, oscType, startTime, duration, maxGain = 0.12) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = oscType;
+          osc.frequency.setValueAtTime(freq, startTime);
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.exponentialRampToValueAtTime(maxGain, startTime + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(startTime);
+          osc.stop(startTime + duration);
+        };
+
+        if (type === 'click') {
+          createOsc(587.33, 'sine', now, 0.09, 0.1);
+          createOsc(880, 'triangle', now + 0.03, 0.08, 0.08);
+        } else if (type === 'zoom') {
+          createOsc(440, 'sine', now, 0.1, 0.08);
+          createOsc(554.37, 'sine', now + 0.05, 0.1, 0.08);
+          createOsc(659.25, 'sine', now + 0.1, 0.14, 0.1);
+        } else if (type === 'tick') {
+          createOsc(783.99, 'sine', now, 0.1, 0.11);
+          createOsc(1046.5, 'sine', now + 0.04, 0.12, 0.09);
+        } else if (type === 'success') {
+          createOsc(523.25, 'triangle', now, 0.15, 0.14);
+          createOsc(659.25, 'triangle', now + 0.1, 0.15, 0.14);
+          createOsc(783.99, 'triangle', now + 0.2, 0.18, 0.14);
+          createOsc(1046.5, 'sine', now + 0.3, 0.4, 0.18);
+        } else if (type === 'error') {
+          createOsc(311.13, 'sawtooth', now, 0.18, 0.07);
+          createOsc(261.63, 'sawtooth', now + 0.15, 0.28, 0.08);
+        }
+      } catch (e) {
+        // AudioContext kısıtlaması varsa sessizce geç
+      }
+    }
+
+    // ============================================================================
+    // 2. MATEMATİKSEL YARDIMCI FONKSİYONLAR
+    // ============================================================================
+    function gcd(a, b) {
+      a = Math.abs(a);
+      b = Math.abs(b);
+      while (b) {
+        let t = b;
+        b = a % b;
+        a = t;
+      }
+      return a || 1;
+    }
+
+    function analyzeFraction(num, den) {
+      const isNegative = (num < 0 && den > 0) || (num > 0 && den < 0);
+      const absNum = Math.abs(num);
+      const absDen = Math.abs(den);
+      const value = isNegative ? -(absNum / absDen) : absNum / absDen;
+      const whole = Math.floor(absNum / absDen);
+      const rem = absNum % absDen;
+
+      let intervalStart = Math.floor(value);
+      if (Object.is(intervalStart, -0)) intervalStart = 0;
+
+      return {
+        num: isNegative ? -absNum : absNum,
+        den: absDen,
+        absNum,
+        absDen,
+        isNegative,
+        value,
+        whole,
+        rem,
+        intervalStart,
+        intervalEnd: intervalStart + 1
+      };
+    }
+
+    function generateRandomTaskFraction(min, max, avoidValues = []) {
+      const denominators = [2, 3, 4, 5, 6, 8, 10];
+      let attempts = 0;
+      while (attempts < 100) {
+        attempts++;
+        const den = denominators[Math.floor(Math.random() * denominators.length)];
+        const rangeSpan = max - min;
+        const randomInt = min + Math.floor(Math.random() * rangeSpan);
+        const step = Math.floor(Math.random() * (den - 1)) + 1;
+        const val = randomInt + (step / den);
+        const num = Math.round(val * den);
+
+        const isDuplicate = avoidValues.some(v => Math.abs(v - (num / den)) < 0.01);
+        if (!isDuplicate && val > min && val < max) {
+          const g = gcd(num, den);
+          const finalNum = num / g;
+          const finalDen = den / g;
+          if (finalDen > 1) {
+            return analyzeFraction(finalNum, finalDen);
+          }
+        }
+      }
+      return analyzeFraction(-3, 4);
+    }
+
+    function getTickExactInfo(intervalStart, divisions, tickIndex) {
+      const exactNum = intervalStart * divisions + tickIndex;
+      const exactDen = divisions;
+      const value = exactNum / exactDen;
+      const isNegative = exactNum < 0;
+      const absNum = Math.abs(exactNum);
+      const whole = Math.floor(absNum / exactDen);
+      const rem = absNum % exactDen;
+
+      const label = rem === 0 ? `${exactNum / exactDen}` : `${exactNum}/${exactDen}`;
+      const mixedLabel = rem === 0
+        ? `${exactNum / exactDen}`
+        : whole > 0
+          ? `${isNegative ? '-' : ''}${whole} tam ${rem}/${exactDen}`
+          : `${isNegative ? '-' : ''}${rem}/${exactDen}`;
+
+      return {
+        exactNum,
+        exactDen,
+        value,
+        isNegative,
+        absNum,
+        whole,
+        rem,
+        label,
+        mixedLabel
+      };
+    }
+
+    function renderFractionBadgeHTML(sign, whole, num, den) {
+      return `
+        <span class="inline-flex items-center font-mono font-bold align-middle text-base">
+          ${sign ? `<span class="mr-0.5 text-lg leading-none">${sign}</span>` : ''}
+          ${whole !== null && whole !== '' && whole !== 0 ? `<span class="mr-1 text-lg leading-none">${whole}</span>` : ''}
+          <span class="inline-flex flex-col items-center justify-center px-1 leading-tight">
+            <span class="border-b-2 border-current px-1 pb-0.5">${num}</span>
+            <span class="pt-0.5 px-1">${den}</span>
+          </span>
+        </span>
+      `;
+    }
+
+    // ============================================================================
+    // 3. UYGULAMA DURUMU (STATE) VE TEMA HARİTASI
+    // ============================================================================
+    const lineTemplates = [
+      { name: 'A Doğrusu', color: 'indigo' },
+      { name: 'B Doğrusu', color: 'emerald' },
+      { name: 'C Doğrusu', color: 'amber' },
+      { name: 'D Doğrusu', color: 'rose' },
+      { name: 'E Doğrusu', color: 'purple' }
+    ];
+
+    const colorMap = {
+      indigo: {
+        bg: 'bg-indigo-500',
+        lightBg: 'bg-indigo-100',
+        border: 'border-indigo-400',
+        text: 'text-indigo-700',
+        badge: 'bg-indigo-500 text-white border-b-4 border-indigo-700',
+        laser: 'border-indigo-500/70 bg-indigo-400/20'
+      },
+      emerald: {
+        bg: 'bg-emerald-500',
+        lightBg: 'bg-emerald-100',
+        border: 'border-emerald-400',
+        text: 'text-emerald-700',
+        badge: 'bg-emerald-500 text-white border-b-4 border-emerald-700',
+        laser: 'border-emerald-500/70 bg-emerald-400/20'
+      },
+      amber: {
+        bg: 'bg-amber-500',
+        lightBg: 'bg-amber-100',
+        border: 'border-amber-400',
+        text: 'text-amber-800',
+        badge: 'bg-amber-500 text-white border-b-4 border-amber-700',
+        laser: 'border-amber-500/70 bg-amber-400/20'
+      },
+      rose: {
+        bg: 'bg-rose-500',
+        lightBg: 'bg-rose-100',
+        border: 'border-rose-400',
+        text: 'text-rose-700',
+        badge: 'bg-rose-500 text-white border-b-4 border-rose-700',
+        laser: 'border-rose-500/70 bg-rose-400/20'
+      },
+      purple: {
+        bg: 'bg-purple-500',
+        lightBg: 'bg-purple-100',
+        border: 'border-purple-400',
+        text: 'text-purple-700',
+        badge: 'bg-purple-500 text-white border-b-4 border-purple-700',
+        laser: 'border-purple-500/70 bg-purple-400/20'
+      }
+    };
+
+    const state = {
+      activeSection: 'section1', // 'section1' | 'section2'
+      workMode: 'explore',       // 'explore' | 'task'
+      minBound: -4,
+      maxBound: 4,
+      tempMin: '-4',
+      tempMax: '4',
+      boundError: '',
+      score: 0,
+      streak: 0,
+      soundEnabled: true,
+      showGuideModal: false,
+      zoomOrigin: { x: '50%', y: '50%' },
+
+      // Bölüm 1 State'leri
+      s1SelectedInterval: 0,
+      s1ZoomModalOpen: false,
+      s1JustOpened: false,
+      s1Divisions: 4,
+      s1SelectedTick: null,
+      s1Pins: [
+        { id: 'init-1', value: 0.75, label: '3/4', mixedLabel: '3/4', intervalStart: 0, divisions: 4, tickIndex: 3 }
+      ],
+      inputFormat: 'simple', // 'simple' | 'mixed'
+      simpleSign: '+',
+      simpleNum: '',
+      simpleDen: '4',
+      mixedSign: '+',
+      mixedWhole: '',
+      mixedNum: '',
+      mixedDen: '4',
+      s1Feedback: null,
+      s1TaskTarget: analyzeFraction(-7, 4),
+      s1TaskShowFormat: 'both',
+
+      // Bölüm 2 State'leri (En az 2, En fazla 5 doğru)
+      s2Lines: [
+        { id: 'line-1', name: 'A Doğrusu', color: 'indigo', selectedInterval: -2, divisions: 3, pin: { value: -1.333333, num: -4, den: 3, label: '-4/3', mixedLabel: '-1 tam 1/3' }, targetFraction: null },
+        { id: 'line-2', name: 'B Doğrusu', color: 'emerald', selectedInterval: 0, divisions: 4, pin: { value: 0.75, num: 3, den: 4, label: '3/4', mixedLabel: '3/4' }, targetFraction: null }
+      ],
+      s2ActiveLineId: 'line-1',
+      s2ZoomModalOpen: false,
+      s2JustOpened: false,
+      s2SelectedTick: null,
+      s2Feedback: null,
+      showLaserGuide: true,
+      sortOrderDir: 'asc', // 'asc' | 'desc'
+      userSortedIds: [],
+      s2SortFeedback: null
+    };
+
+    // Yukarıdan Aşağıya Süzülen Sembolleri Başlatma
+    function initFloatingSymbols() {
+      const floatingMathSymbols = [
+        { content: '¾', label: 'Basit Kesir', left: '4%', duration: '16s', delay: '0s', style: 'text-2xl font-mono font-black text-indigo-500/70 bg-white/80 px-3 py-1.5 rounded-2xl shadow-sm border-2 border-indigo-200' },
+        { content: '-1 tam ½', label: 'Tam Sayılı', left: '13%', duration: '20s', delay: '2s', style: 'text-xs font-mono font-black text-rose-500/80 bg-white/80 px-3 py-1.5 rounded-full shadow-sm border-2 border-rose-200' },
+        { content: '🔍', label: 'Büyüteç', left: '22%', duration: '15s', delay: '4s', style: 'text-2xl bg-sky-100/80 p-2 rounded-full border-2 border-sky-200 shadow-sm' },
+        { content: 'a / b', label: 'Rasyonel', left: '31%', duration: '18s', delay: '1s', style: 'text-sm font-mono font-black text-purple-600/75 bg-white/80 px-3 py-1 rounded-xl shadow-sm border-2 border-purple-200' },
+        { content: '&lt;  =  &gt;', label: 'Karşılaştır', left: '40%', duration: '22s', delay: '5s', style: 'text-xs font-black text-amber-600/80 bg-amber-50/90 px-3 py-1 rounded-full shadow-sm border-2 border-amber-200' },
+        { content: '-7/4', label: 'Bileşik', left: '49%', duration: '17s', delay: '3s', style: 'text-lg font-mono font-black text-pink-500/75 bg-white/80 px-2.5 py-1 rounded-xl border-2 border-pink-200' },
+        { content: 'ℚ', label: 'Rasyonel Küme', left: '58%', duration: '19s', delay: '0.5s', style: 'text-2xl font-black text-teal-600/75 bg-teal-50/90 px-3 py-1 rounded-2xl border-2 border-teal-200 shadow-sm' },
+        { content: '📏', label: 'Sayı Doğrusu', left: '67%', duration: '14s', delay: '6s', style: 'text-2xl bg-amber-100/80 p-2 rounded-full border-2 border-amber-200' },
+        { content: '-⅖ &lt; ⅗', label: 'Sıralama', left: '76%', duration: '21s', delay: '2.5s', style: 'text-xs font-mono font-black text-emerald-600/80 bg-white/80 px-3 py-1.5 rounded-full shadow-sm border-2 border-emerald-200' },
+        { content: '0', label: 'Referans Noktası', left: '85%', duration: '16s', delay: '4.5s', style: 'text-xl font-mono font-black text-sky-600/80 bg-white/80 px-3 py-1 rounded-full border-2 border-sky-300 shadow-sm' },
+        { content: '➗', label: 'Eş Parçalar', left: '93%', duration: '18s', delay: '1.5s', style: 'text-xl bg-fuchsia-100/80 p-2 rounded-2xl border-2 border-fuchsia-200' }
+      ];
+
+      const container = document.getElementById('floating-symbols-container');
+      container.innerHTML = floatingMathSymbols.map(item => `
+        <div class="floating-math-item flex flex-col items-center gap-0.5" style="left: ${item.left}; animation-duration: ${item.duration}; animation-delay: ${item.delay};">
+          <div class="${item.style}">${item.content}</div>
+          <span class="text-[10px] font-extrabold text-slate-500/70 bg-white/60 px-1.5 rounded-full">${item.label}</span>
+        </div>
+      `).join('');
+    }
+
+    // ============================================================================
+    // 4. ETKİLEŞİM VE EVENT HANDLER FONKSİYONLARI
+    // ============================================================================
+    function captureZoomOriginFromEl(el) {
+      if (el && el.getBoundingClientRect) {
+        const rect = el.getBoundingClientRect();
+        const centerX = Math.round(rect.left + rect.width / 2);
+        const centerY = Math.round(rect.top + rect.height / 2);
+        state.zoomOrigin = { x: `${centerX}px`, y: `${centerY}px` };
+      } else {
+        state.zoomOrigin = { x: '50%', y: '50%' };
+      }
+    }
+
+    function getIntegers() {
+      const arr = [];
+      for (let i = state.minBound; i <= state.maxBound; i++) {
+        arr.push(i);
+      }
+      return arr;
+    }
+
+    function getPercentPos(val) {
+      const span = state.maxBound - state.minBound;
+      if (span <= 0) return 50;
+      const pct = ((val - state.minBound) / span) * 100;
+      return Math.max(0, Math.min(100, pct));
+    }
+
+    function toggleSound() {
+      state.soundEnabled = !state.soundEnabled;
+      if (state.soundEnabled) playSoundEffect('click');
+      renderApp();
+    }
+
+    function setGuideModal(open) {
+      playSoundEffect('click');
+      state.showGuideModal = open;
+      renderModals();
+    }
+
+    function switchSection(sec) {
+      playSoundEffect('click');
+      state.activeSection = sec;
+      if (state.workMode === 'task') {
+        if (sec === 'section1') generateNewS1Task(false);
+        else generateNewS2Task(false);
+      } else {
+        state.s1Feedback = null;
+        state.s2Feedback = null;
+        state.s2SortFeedback = null;
+      }
+      renderApp();
+    }
+
+    function switchWorkMode(mode) {
+      playSoundEffect('click');
+      state.workMode = mode;
+      if (mode === 'task') {
+        if (state.activeSection === 'section1') generateNewS1Task(false);
+        else generateNewS2Task(false);
+      } else {
+        state.s1Feedback = null;
+        state.s2Feedback = null;
+        state.s2SortFeedback = null;
+      }
+      renderApp();
+    }
+
+    function applyBoundsForm(e) {
+      e.preventDefault();
+      const minInput = document.getElementById('min-bound-input');
+      const maxInput = document.getElementById('max-bound-input');
+      const pMin = parseInt(minInput ? minInput.value : state.tempMin, 10);
+      const pMax = parseInt(maxInput ? maxInput.value : state.tempMax, 10);
+
+      if (isNaN(pMin) || isNaN(pMax)) {
+        playSoundEffect('error');
+        state.boundError = 'Lütfen geçerli tam sayılar giriniz.';
+        renderApp();
+        return;
+      }
+      if (pMin >= pMax) {
+        playSoundEffect('error');
+        state.boundError = 'Başlangıç (Min) değeri, Bitiş (Max) değerinden küçük olmalıdır!';
+        renderApp();
+        return;
+      }
+      if (pMax - pMin > 30) {
+        playSoundEffect('error');
+        state.boundError = 'Görsel netlik için aralık farkı en fazla 30 birim olabilir (Örn: -10 ile +20).';
+        renderApp();
+        return;
+      }
+
+      applyPresetRange(pMin, pMax);
+    }
+
+    function applyPresetRange(min, max) {
+      playSoundEffect('click');
+      state.boundError = '';
+      state.minBound = min;
+      state.maxBound = max;
+      state.tempMin = String(min);
+      state.tempMax = String(max);
+
+      const safeInterval = Math.max(min, Math.min(0, max - 1));
+      state.s1SelectedInterval = safeInterval;
+      state.s1SelectedTick = null;
+      state.s1Feedback = null;
+
+      state.s2Lines = state.s2Lines.map(l => ({
+        ...l,
+        selectedInterval: safeInterval
+      }));
+
+      if (state.workMode === 'task') {
+        if (state.activeSection === 'section1') generateNewS1Task(false);
+        else generateNewS2Task(false);
+      }
+      renderApp();
+    }
+
+    function generateNewS1Task(playSnd = true) {
+      if (playSnd) playSoundEffect('click');
+      const newTarget = generateRandomTaskFraction(state.minBound, state.maxBound, [state.s1TaskTarget ? state.s1TaskTarget.value : 0]);
+      state.s1TaskTarget = newTarget;
+      state.s1SelectedTick = null;
+      state.s1Feedback = null;
+      if (newTarget.whole > 0) {
+        const formats = ['simple', 'mixed', 'both'];
+        state.s1TaskShowFormat = formats[Math.floor(Math.random() * formats.length)];
+      } else {
+        state.s1TaskShowFormat = 'simple';
+      }
+      renderApp();
+    }
+
+    function generateNewS2Task(playSnd = true) {
+      if (playSnd) playSoundEffect('click');
+      const count = Math.max(2, Math.min(5, state.s2Lines.length));
+      const generatedTargets = [];
+
+      for (let i = 0; i < count; i++) {
+        const avoid = generatedTargets.map(t => t.value);
+        const newTarget = generateRandomTaskFraction(state.minBound, state.maxBound, avoid);
+        generatedTargets.push(newTarget);
+      }
+
+      const safeInterval = Math.max(state.minBound, Math.min(0, state.maxBound - 1));
+      state.s2Lines = generatedTargets.map((t, idx) => {
+        const tpl = lineTemplates[idx] || lineTemplates[0];
+        return {
+          id: `line-${idx + 1}`,
+          name: tpl.name,
+          color: tpl.color,
+          selectedInterval: safeInterval,
+          divisions: 2,
+          pin: null,
+          targetFraction: t
+        };
+      });
+
+      state.s2ActiveLineId = 'line-1';
+      state.s2SelectedTick = null;
+      state.userSortedIds = [];
+      state.s2Feedback = null;
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    // ================= BÖLÜM 1 AKSİYONLARI =================
+    function openS1ZoomModal(intVal, btnEl) {
+      captureZoomOriginFromEl(btnEl);
+      playSoundEffect('zoom');
+      state.s1SelectedInterval = intVal;
+      state.s1SelectedTick = null;
+      state.s1Feedback = null;
+      state.s1ZoomModalOpen = true;
+      state.s1JustOpened = true;
+      renderApp();
+    }
+
+    function closeS1ZoomModal() {
+      playSoundEffect('click');
+      state.s1ZoomModalOpen = false;
+      state.s1JustOpened = false;
+      renderModals();
+      renderApp();
+    }
+
+    function setS1Divisions(num) {
+      playSoundEffect('click');
+      const val = Math.max(2, Math.min(20, parseInt(num, 10) || 2));
+      state.s1Divisions = val;
+      state.s1SelectedTick = null;
+      state.s1Feedback = null;
+      renderModals();
+      renderApp();
+    }
+
+    function selectS1Tick(idx) {
+      playSoundEffect('tick');
+      state.s1SelectedTick = idx;
+      state.s1Feedback = null;
+      const info = getTickExactInfo(state.s1SelectedInterval, state.s1Divisions, idx);
+      state.simpleSign = info.value < 0 ? '-' : '+';
+      state.mixedSign = info.value < 0 ? '-' : '+';
+      state.simpleDen = String(state.s1Divisions);
+      state.mixedDen = String(state.s1Divisions);
+      state.simpleNum = '';
+      state.mixedWhole = '';
+      state.mixedNum = '';
+      renderModals();
+      renderApp();
+    }
+
+    function setS1InputFormat(fmt) {
+      syncS1InputsFromDOM();
+      playSoundEffect('click');
+      state.inputFormat = fmt;
+      renderModals();
+    }
+
+    function toggleS1Sign(which) {
+      syncS1InputsFromDOM();
+      playSoundEffect('click');
+      if (which === 'simple') {
+        state.simpleSign = state.simpleSign === '+' ? '-' : '+';
+      } else {
+        state.mixedSign = state.mixedSign === '+' ? '-' : '+';
+      }
+      renderModals();
+    }
+
+    function syncS1InputsFromDOM() {
+      const sNumEl = document.getElementById('s1-simple-num');
+      const sDenEl = document.getElementById('s1-simple-den');
+      if (sNumEl) state.simpleNum = sNumEl.value;
+      if (sDenEl) state.simpleDen = sDenEl.value;
+
+      const mWholeEl = document.getElementById('s1-mixed-whole');
+      const mNumEl = document.getElementById('s1-mixed-num');
+      const mDenEl = document.getElementById('s1-mixed-den');
+      if (mWholeEl) state.mixedWhole = mWholeEl.value;
+      if (mNumEl) state.mixedNum = mNumEl.value;
+      if (mDenEl) state.mixedDen = mDenEl.value;
+    }
+
+    function verifyS1Submission(e) {
+      e.preventDefault();
+      syncS1InputsFromDOM();
+      if (state.s1SelectedTick === null) return;
+
+      const tickInfo = getTickExactInfo(state.s1SelectedInterval, state.s1Divisions, state.s1SelectedTick);
+      let userValue = null;
+      let userFormattedLabel = '';
+
+      if (state.inputFormat === 'simple') {
+        const pNum = parseInt(state.simpleNum, 10);
+        const pDen = parseInt(state.simpleDen, 10);
+        if (isNaN(pNum) || isNaN(pDen) || pDen <= 0 || pNum < 0) {
+          playSoundEffect('error');
+          state.s1Feedback = {
+            type: 'error',
+            title: 'Eksik veya Hatalı Giriş',
+            message: 'Lütfen Pay ve Payda kutularına pozitif tam sayılar giriniz (Payda 0 olamaz).'
+          };
+          renderModals();
+          return;
+        }
+        const signMult = state.simpleSign === '-' && pNum !== 0 ? -1 : 1;
+        userValue = signMult * (pNum / pDen);
+        userFormattedLabel = `${signMult < 0 ? '-' : ''}${pNum}/${pDen}`;
+      } else {
+        const pWhole = state.mixedWhole === '' ? 0 : parseInt(state.mixedWhole, 10);
+        const pNum = parseInt(state.mixedNum, 10);
+        const pDen = parseInt(state.mixedDen, 10);
+        if (isNaN(pWhole) || isNaN(pNum) || isNaN(pDen) || pDen <= 0 || pWhole < 0 || pNum < 0) {
+          playSoundEffect('error');
+          state.s1Feedback = {
+            type: 'error',
+            title: 'Eksik veya Hatalı Giriş',
+            message: 'Lütfen Tam Kısım, Pay ve Payda alanlarına geçerli sayılar giriniz.'
+          };
+          renderModals();
+          return;
+        }
+        if (pNum >= pDen) {
+          playSoundEffect('error');
+          state.s1Feedback = {
+            type: 'warning',
+            title: 'Tam Sayılı Kesir Kuralı!',
+            message: `Tam sayılı kesirlerde kesir kısmının payı (${pNum}), paydasından (${pDen}) küçük olmalıdır.`
+          };
+          renderModals();
+          return;
+        }
+        const signMult = state.mixedSign === '-' && (pWhole !== 0 || pNum !== 0) ? -1 : 1;
+        userValue = signMult * (pWhole + (pNum / pDen));
+        userFormattedLabel = pWhole > 0
+          ? `${signMult < 0 ? '-' : ''}${pWhole} tam ${pNum}/${pDen}`
+          : `${signMult < 0 ? '-' : ''}${pNum}/${pDen}`;
+      }
+
+      const isMatchingTick = Math.abs(userValue - tickInfo.value) < 0.0001;
+      if (!isMatchingTick) {
+        playSoundEffect('error');
+        state.streak = 0;
+        let hintText = `Seçtiğin nokta ${state.s1SelectedInterval} ile ${state.s1SelectedInterval + 1} aralığında. `;
+        if (tickInfo.value < 0) {
+          hintText += `Negatif sayılarda 0'dan SOLA doğru saymalısın! Bu nokta 0'dan sola doğru ${tickInfo.whole} tam ve ${tickInfo.rem}/${tickInfo.exactDen} birim uzaklıktadır (Yani ${tickInfo.label} veya ${tickInfo.mixedLabel}).`;
+        } else {
+          hintText += `Bu noktanın doğru değeri ${tickInfo.label} (${tickInfo.mixedLabel}) olmalıdır.`;
+        }
+        state.s1Feedback = {
+          type: 'error',
+          title: 'Nokta ile Yazdığın Kesir Uyuşmuyor!',
+          message: hintText
+        };
+        renderModals();
+        renderApp();
+        return;
+      }
+
+      if (state.workMode === 'task' && state.s1TaskTarget) {
+        const isMatchingTarget = Math.abs(tickInfo.value - state.s1TaskTarget.value) < 0.0001;
+        if (!isMatchingTarget) {
+          playSoundEffect('error');
+          state.streak = 0;
+          state.s1Feedback = {
+            type: 'warning',
+            title: 'Doğru Okudun Ama Hedef Kesir Bu Değil!',
+            message: `Tıkladığın nokta gerçekten ${tickInfo.label} (${tickInfo.mixedLabel}), fakat görevimiz ${state.s1TaskTarget.num}/${state.s1TaskTarget.den} kesrini bulmaktı. Hedef kesir [${state.s1TaskTarget.intervalStart}, ${state.s1TaskTarget.intervalEnd}] aralığında yer alıyor!`
+          };
+          renderModals();
+          renderApp();
+          return;
+        }
+      }
+
+      playSoundEffect('success');
+      const newPin = {
+        id: `pin-${Date.now()}`,
+        value: tickInfo.value,
+        label: tickInfo.label,
+        mixedLabel: tickInfo.mixedLabel,
+        userLabel: userFormattedLabel,
+        intervalStart: state.s1SelectedInterval,
+        divisions: state.s1Divisions,
+        tickIndex: state.s1SelectedTick
+      };
+
+      state.s1Pins = state.s1Pins.filter(p => Math.abs(p.value - tickInfo.value) > 0.0001).concat(newPin);
+
+      if (state.workMode === 'task') {
+        const bonus = 25 + state.streak * 5;
+        state.score += bonus;
+        state.streak += 1;
+        state.s1Feedback = {
+          type: 'success',
+          title: `Harika! +${bonus} Puan Kazandın 🎉`,
+          message: `${tickInfo.label} (${tickInfo.mixedLabel}) noktasını büyüteçle tam isabet kalibre ettin ve ana sayı doğrusuna işledin!`
+        };
+      } else {
+        state.score += 10;
+        state.s1Feedback = {
+          type: 'success',
+          title: 'Süper! Ana Sayı Doğrusuna Eklendi ✨',
+          message: `${tickInfo.label} ${tickInfo.whole > 0 && tickInfo.rem > 0 ? `(${tickInfo.mixedLabel})` : ''} noktası ana sayı doğrusuna 3D pin olarak yerleştirildi.`
+        };
+      }
+
+      state.s1ZoomModalOpen = false;
+      state.s1SelectedTick = null;
+      renderApp();
+    }
+
+    function clearS1Pins() {
+      playSoundEffect('click');
+      state.s1Pins = [];
+      renderApp();
+    }
+
+    // ================= BÖLÜM 2 AKSİYONLARI =================
+    function addS2Line() {
+      if (state.s2Lines.length >= 5) return;
+      playSoundEffect('click');
+      const nextIdx = state.s2Lines.length;
+      const tpl = lineTemplates[nextIdx] || { name: `${nextIdx + 1}. Doğru`, color: 'indigo' };
+      const newId = `line-${Date.now()}`;
+
+      let targetFraction = null;
+      if (state.workMode === 'task') {
+        const avoid = state.s2Lines.map(l => l.targetFraction ? l.targetFraction.value : null).filter(v => v !== null);
+        targetFraction = generateRandomTaskFraction(state.minBound, state.maxBound, avoid);
+      }
+
+      const safeInterval = Math.max(state.minBound, Math.min(0, state.maxBound - 1));
+      state.s2Lines.push({
+        id: newId,
+        name: tpl.name,
+        color: tpl.color,
+        selectedInterval: safeInterval,
+        divisions: 2,
+        pin: null,
+        targetFraction
+      });
+      state.s2ActiveLineId = newId;
+      state.userSortedIds = [];
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function removeS2Line(lineId) {
+      if (state.s2Lines.length <= 2) return;
+      playSoundEffect('click');
+      const filtered = state.s2Lines.filter(l => l.id !== lineId);
+      state.s2Lines = filtered.map((line, idx) => ({
+        ...line,
+        name: lineTemplates[idx].name,
+        color: lineTemplates[idx].color
+      }));
+      if (!state.s2Lines.some(l => l.id === state.s2ActiveLineId)) {
+        state.s2ActiveLineId = state.s2Lines[0].id;
+      }
+      state.userSortedIds = state.userSortedIds.filter(id => id !== lineId);
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function clearAllS2Pins() {
+      playSoundEffect('click');
+      state.s2Lines = state.s2Lines.map(l => ({ ...l, pin: null }));
+      state.s2SelectedTick = null;
+      state.userSortedIds = [];
+      state.s2Feedback = null;
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function clearSingleS2Pin(lineId) {
+      playSoundEffect('click');
+      state.s2Lines = state.s2Lines.map(l => l.id === lineId ? { ...l, pin: null } : l);
+      state.userSortedIds = state.userSortedIds.filter(id => id !== lineId);
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function toggleLaserGuide() {
+      playSoundEffect('click');
+      state.showLaserGuide = !state.showLaserGuide;
+      renderApp();
+    }
+
+    function openS2IntervalModal(lineId, intervalStart, btnEl) {
+      captureZoomOriginFromEl(btnEl);
+      playSoundEffect('zoom');
+      state.s2ActiveLineId = lineId;
+      state.s2SelectedTick = null;
+      state.s2Feedback = null;
+      state.s2Lines = state.s2Lines.map(l => l.id === lineId ? { ...l, selectedInterval: intervalStart } : l);
+      state.s2ZoomModalOpen = true;
+      state.s2JustOpened = true;
+      renderApp();
+    }
+
+    function closeS2ZoomModal() {
+      playSoundEffect('click');
+      state.s2ZoomModalOpen = false;
+      state.s2JustOpened = false;
+      renderModals();
+      renderApp();
+    }
+
+    function changeS2Divisions(newDiv) {
+      playSoundEffect('click');
+      const d = Math.max(2, Math.min(20, parseInt(newDiv, 10) || 2));
+      state.s2SelectedTick = null;
+      state.s2Lines = state.s2Lines.map(l => l.id === state.s2ActiveLineId ? { ...l, divisions: d } : l);
+      renderModals();
+      renderApp();
+    }
+
+    function selectAndPinS2Tick(idx) {
+      const activeLine = state.s2Lines.find(l => l.id === state.s2ActiveLineId) || state.s2Lines[0];
+      if (!activeLine) return;
+      state.s2SelectedTick = idx;
+      const info = getTickExactInfo(activeLine.selectedInterval, activeLine.divisions, idx);
+
+      if (state.workMode === 'task' && activeLine.targetFraction) {
+        const target = activeLine.targetFraction;
+        if (Math.abs(info.value - target.value) > 0.0001) {
+          playSoundEffect('error');
+          state.s2Feedback = {
+            type: 'warning',
+            title: 'Hedef Kesir Bu Nokta Değil!',
+            message: `Tıkladığın nokta ${info.label} (${info.mixedLabel}). Ancak ${activeLine.name} üzerinde ${target.num}/${target.den} kesrini bulmalısın!`
+          };
+          renderModals();
+          return;
+        }
+      }
+
+      playSoundEffect('tick');
+      state.s2Lines = state.s2Lines.map(line => {
+        if (line.id !== activeLine.id) return line;
+        return {
+          ...line,
+          pin: {
+            value: info.value,
+            num: info.exactNum,
+            den: info.exactDen,
+            label: info.label,
+            mixedLabel: info.mixedLabel,
+            tickIndex: idx
+          }
+        };
+      });
+
+      state.s2Feedback = {
+        type: 'success',
+        title: `${activeLine.name} Üzerinde İşaretlendi! 📍`,
+        message: `Seçtiğin ${info.label} (${info.mixedLabel}) noktası yukarıdaki ana sayı doğrusuna ve dikey karşılaştırma lazerine anında yansıtıldı!`
+      };
+
+      state.s2ZoomModalOpen = false;
+      renderApp();
+    }
+
+    function setSortDir(dir) {
+      playSoundEffect('click');
+      state.sortOrderDir = dir;
+      state.userSortedIds = [];
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function addLineToSort(lineId) {
+      if (state.userSortedIds.includes(lineId)) return;
+      playSoundEffect('click');
+      state.userSortedIds.push(lineId);
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function resetSort() {
+      playSoundEffect('click');
+      state.userSortedIds = [];
+      state.s2SortFeedback = null;
+      renderApp();
+    }
+
+    function checkS2Sort() {
+      const pinnedLines = state.s2Lines.filter(l => l.pin !== null);
+      if (pinnedLines.length < 2) {
+        playSoundEffect('error');
+        state.s2SortFeedback = {
+          type: 'warning',
+          message: 'Sıralama yapmak için önce en az 2 sayı doğrusunda nokta işaretlemelisin!'
+        };
+        renderApp();
+        return;
+      }
+      if (state.userSortedIds.length !== pinnedLines.length) {
+        playSoundEffect('error');
+        state.s2SortFeedback = {
+          type: 'warning',
+          message: 'Lütfen tüm işaretli kesir kartlarına tıklayarak sıralama kutularına yerleştir!'
+        };
+        renderApp();
+        return;
+      }
+
+      const userValues = state.userSortedIds.map(id => {
+        const found = state.s2Lines.find(l => l.id === id);
+        return found && found.pin ? found.pin.value : 0;
+      });
+
+      let isCorrect = true;
+      for (let i = 0; i < userValues.length - 1; i++) {
+        if (state.sortOrderDir === 'asc' && userValues[i] > userValues[i + 1] + 0.0001) {
+          isCorrect = false;
+        }
+        if (state.sortOrderDir === 'desc' && userValues[i] < userValues[i + 1] - 0.0001) {
+          isCorrect = false;
+        }
+      }
+
+      if (isCorrect) {
+        playSoundEffect('success');
+        state.score += 35;
+        state.streak += 1;
+        state.s2SortFeedback = {
+          type: 'success',
+          message: 'Harika! Sayı doğrusunda sağa doğru gidildikçe sayıların büyüdüğünü kullanarak doğru sıraladın! +35 Puan 🏆'
+        };
+      } else {
+        playSoundEffect('error');
+        state.streak = 0;
+        state.s2SortFeedback = {
+          type: 'error',
+          message: 'İpucu: Yukarıdaki hizalı sayı doğrularına bak! Sayı doğrusunda EN SOLDAKİ sayı her zaman EN KÜÇÜK, EN SAĞDAKİ sayı ise EN BÜYÜKTÜR.'
+        };
+      }
+      renderApp();
+    }
+
+    // ============================================================================
+    // 5. ARAYÜZ RENDER FONKSİYONLARI
+    // ============================================================================
+    function renderApp() {
+      const integers = getIntegers();
+      const root = document.getElementById('app-root');
+
+      // Üst Başlık ve Sekmeler
+      const headerHTML = `
+        <header class="bg-white/90 backdrop-blur-md rounded-3xl p-3.5 sm:p-5 border-2 border-white shadow-[0_8px_0_rgb(203,213,225),0_15px_30px_rgba(148,163,184,0.25)]">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white border-b-4 border-indigo-800 shadow-lg shrink-0 text-2xl">
+                🧭
+              </div>
+              <div>
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[11px] sm:text-xs font-extrabold mb-1">
+                  ✨ 3D İnteraktif Sayı Doğrusu Atölyesi
+                </div>
+                <h1 class="text-base sm:text-xl md:text-2xl font-black tracking-tight text-slate-800 leading-snug">
+                  Rasyonel Sayılar: Hassas Kalibrasyon ve Karşılaştırma Laboratuvarı
+                </h1>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between sm:justify-end gap-2">
+              <button
+                type="button"
+                onclick="toggleSound()"
+                class="btn-3d flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl font-extrabold text-xs border-b-4 ${
+                  state.soundEnabled
+                    ? 'bg-emerald-400 text-white border-emerald-600 shadow-sm'
+                    : 'bg-slate-200 text-slate-600 border-slate-400'
+                }"
+              >
+                <span>${state.soundEnabled ? '🔊' : '🔇'}</span>
+                <span>Ses Efektleri: ${state.soundEnabled ? 'Açık' : 'Kapalı'}</span>
+              </button>
+
+              <div class="flex items-center gap-2 bg-gradient-to-r from-amber-300 to-orange-300 text-amber-950 px-3.5 py-2.5 rounded-2xl border-b-4 border-amber-500 font-black text-xs sm:text-sm shadow-sm">
+                <span>🏆 ${state.score} Puan</span>
+                ${state.streak > 1 ? `<span class="bg-white/80 text-orange-700 px-2 py-0.5 rounded-full text-xs">🔥 ${state.streak}x</span>` : ''}
+              </div>
+
+              <button
+                type="button"
+                onclick="setGuideModal(true)"
+                class="btn-3d flex items-center gap-1.5 bg-purple-500 hover:bg-purple-400 text-white px-3.5 py-2.5 rounded-2xl border-b-4 border-purple-700 font-extrabold text-xs"
+              >
+                <span>💡 İpucu</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-3.5 pt-3.5 border-t-2 border-slate-100 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 flex-1">
+              <button
+                type="button"
+                onclick="switchSection('section1')"
+                class="btn-3d flex items-center justify-center gap-2 px-3.5 py-3 rounded-2xl font-black text-xs sm:text-sm border-b-4 ${
+                  state.activeSection === 'section1'
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-indigo-800 shadow-md'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                }"
+              >
+                <span>🔍 1. Isınma Turu (Tekli & Büyüteç)</span>
+              </button>
+
+              <button
+                type="button"
+                onclick="switchSection('section2')"
+                class="btn-3d flex items-center justify-center gap-2 px-3.5 py-3 rounded-2xl font-black text-xs sm:text-sm border-b-4 ${
+                  state.activeSection === 'section2'
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white border-rose-800 shadow-md'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                }"
+              >
+                <span>📚 2. Çoklu Karşılaştırma Laboratuvarı</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:flex items-center bg-sky-100/90 p-1.5 rounded-2xl border-2 border-sky-200 w-full md:w-auto">
+              <button
+                type="button"
+                onclick="switchWorkMode('explore')"
+                class="btn-3d flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl font-extrabold text-xs ${
+                  state.workMode === 'explore'
+                    ? 'bg-white text-indigo-700 shadow-sm border-b-2 border-indigo-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }"
+              >
+                <span>🎛️ Serbest Keşif</span>
+              </button>
+              <button
+                type="button"
+                onclick="switchWorkMode('task')"
+                class="btn-3d flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl font-extrabold text-xs ${
+                  state.workMode === 'task'
+                    ? 'bg-amber-400 text-amber-950 shadow-sm border-b-2 border-amber-600'
+                    : 'text-slate-600 hover:text-slate-900'
+                }"
+              >
+                <span>🎯 Görev Modu</span>
+              </button>
+            </div>
+          </div>
+        </header>
+      `;
+
+      // Ortak Sınır Belirleme Barı
+      const presets = [
+        { label: '-2 ile +2', min: -2, max: 2 },
+        { label: '-4 ile +4', min: -4, max: 4 },
+        { label: '-10 ile +5', min: -10, max: 5 },
+        { label: '-3 ile +20 (Geniş)', min: -3, max: 20 }
+      ];
+
+      const boundsBarHTML = `
+        <section class="bg-white/90 backdrop-blur-md rounded-3xl p-3.5 sm:p-4 border-2 border-white shadow-[0_6px_0_rgb(203,213,225)]">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <form onsubmit="applyBoundsForm(event)" class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-black uppercase tracking-wider text-indigo-700 bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200">
+                📏 Sınırlar:
+              </span>
+              <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-2xl border-2 border-slate-200">
+                <label class="text-xs font-extrabold text-slate-600">Min:</label>
+                <input
+                  id="min-bound-input"
+                  type="number"
+                  value="${state.tempMin}"
+                  class="w-14 sm:w-16 bg-white text-center font-mono font-black text-sm text-indigo-700 rounded-xl py-1 border-2 border-indigo-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-2xl border-2 border-slate-200">
+                <label class="text-xs font-extrabold text-slate-600">Max:</label>
+                <input
+                  id="max-bound-input"
+                  type="number"
+                  value="${state.tempMax}"
+                  class="w-14 sm:w-16 bg-white text-center font-mono font-black text-sm text-indigo-700 rounded-xl py-1 border-2 border-indigo-200 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <button
+                type="submit"
+                class="btn-3d bg-indigo-500 hover:bg-indigo-400 text-white font-extrabold text-xs px-4 py-2 rounded-2xl border-b-4 border-indigo-700"
+              >
+                Ölçekle
+              </button>
+            </form>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-xs font-bold text-slate-500 mr-1">Hızlı Aralık:</span>
+              ${presets.map(p => `
+                <button
+                  type="button"
+                  onclick="applyPresetRange(${p.min}, ${p.max})"
+                  class="btn-3d text-xs font-extrabold px-2.5 sm:px-3 py-1.5 rounded-xl border-b-2 ${
+                    state.minBound === p.min && state.maxBound === p.max
+                      ? 'bg-pink-500 text-white border-pink-700'
+                      : 'bg-sky-100 hover:bg-sky-200 text-sky-800 border-sky-300'
+                  }"
+                >
+                  ${p.label}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+          ${state.boundError ? `
+            <p class="mt-2 text-xs font-extrabold text-rose-600 bg-rose-100 px-3 py-1.5 rounded-xl inline-block">
+              ⚠️ ${state.boundError}
+            </p>
+          ` : ''}
+        </section>
+      `;
+
+      // Bölüm İçeriği
+      const contentHTML = state.activeSection === 'section1'
+        ? renderSection1HTML(integers)
+        : renderSection2HTML(integers);
+
+      root.innerHTML = headerHTML + boundsBarHTML + contentHTML;
+      renderModals();
+    }
+
+    function renderSection1HTML(integers) {
+      const target = state.s1TaskTarget;
+      const taskCardHTML = (state.workMode === 'task' && target) ? `
+        <div class="bg-gradient-to-r from-amber-200 via-yellow-100 to-orange-200 rounded-3xl p-4 sm:p-5 border-2 border-amber-400 shadow-[0_6px_0_rgb(245,158,11)] flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center border-b-4 border-amber-700 shrink-0 shadow text-2xl">
+              🎯
+            </div>
+            <div>
+              <span class="text-[11px] sm:text-xs font-black uppercase tracking-wider text-amber-900 bg-white/80 px-2.5 py-0.5 rounded-full">
+                🎯 Hedef Rasyonel Sayıyı Bul ve Kalibre Et!
+              </span>
+              <div class="mt-1 flex flex-wrap items-center gap-2.5">
+                <span class="text-sm sm:text-lg font-extrabold text-slate-800">
+                  Sayı doğrusunda şu kesri bul:
+                </span>
+                <div class="bg-white px-3.5 py-1 rounded-2xl border-2 border-amber-400 shadow-sm text-indigo-700">
+                  ${state.s1TaskShowFormat === 'mixed' && target.whole > 0
+                    ? renderFractionBadgeHTML(target.isNegative ? '-' : '', target.whole, target.rem, target.absDen)
+                    : renderFractionBadgeHTML(target.isNegative ? '-' : '', null, target.absNum, target.absDen)
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick="generateNewS1Task(true)"
+            class="btn-3d w-full sm:w-auto flex items-center justify-center gap-1.5 bg-white hover:bg-amber-50 text-amber-900 font-black text-xs px-4 py-2.5 rounded-2xl border-b-4 border-amber-400 shrink-0"
+          >
+            🔄 Yeni Hedef
+          </button>
+        </div>
+      ` : '';
+
+      const minWidthPx = Math.max(280, (state.maxBound - state.minBound) * 38);
+
+      const intervalsHTML = integers.slice(0, -1).map(intVal => {
+        const leftPct = getPercentPos(intVal);
+        const widthPct = 100 / (state.maxBound - state.minBound);
+        const isSelected = state.s1SelectedInterval === intVal;
+
+        let subTicksHTML = '';
+        if (isSelected) {
+          for (let idx = 0; idx < state.s1Divisions - 1; idx++) {
+            const subPct = ((idx + 1) / state.s1Divisions) * 100;
+            subTicksHTML += `<span style="left: ${subPct}%" class="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-indigo-600/70 pointer-events-none"></span>`;
+          }
+        }
+
+        return `
+          <button
+            type="button"
+            onclick="openS1ZoomModal(${intVal}, this)"
+            style="left: ${leftPct}%; width: ${widthPct}%;"
+            class="absolute top-1/2 -translate-y-1/2 h-12 rounded-xl transition-all group flex items-center justify-center ${
+              isSelected
+                ? 'bg-amber-300/60 ring-4 ring-amber-400 z-10 shadow-md'
+                : 'hover:bg-sky-300/40 z-0'
+            }"
+            title="[${intVal}, ${intVal + 1}] Aralığını Büyüteçle Aç"
+          >
+            ${subTicksHTML}
+            <span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black transition-all flex items-center gap-1 whitespace-nowrap ${
+              isSelected
+                ? 'bg-amber-500 text-white -translate-y-8 shadow border-b-2 border-amber-700 scale-105'
+                : 'opacity-0 group-hover:opacity-100 bg-sky-600 text-white -translate-y-7'
+            }">
+              🔍 [${intVal}, ${intVal + 1}] Büyüteç
+            </span>
+          </button>
+        `;
+      }).join('');
+
+      const integerTicksHTML = integers.map(intVal => {
+        const leftPct = getPercentPos(intVal);
+        const isZero = intVal === 0;
+        return `
+          <div style="left: ${leftPct}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-20">
+            <div class="w-1.5 rounded-full ${isZero ? 'h-9 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'h-6 bg-slate-700'}"></div>
+            <span class="mt-7 font-mono text-[11px] sm:text-sm font-black px-1.5 sm:px-2 py-0.5 rounded-lg ${
+              isZero ? 'bg-rose-500 text-white border-b-2 border-rose-700' : 'text-slate-700 bg-white/80'
+            }">${intVal}</span>
+          </div>
+        `;
+      }).join('');
+
+      const pinsHTML = state.s1Pins.map(pin => {
+        const leftPct = getPercentPos(pin.value);
+        return `
+          <div style="left: ${leftPct}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-none">
+            <div class="-mt-12 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-mono font-black text-xs px-2.5 py-1 rounded-xl border-b-2 border-emerald-800 shadow-md whitespace-nowrap">
+              ${pin.label}
+            </div>
+            <div class="w-0.5 h-3 bg-emerald-600"></div>
+            <div class="w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow"></div>
+          </div>
+        `;
+      }).join('');
+
+      const feedbackHTML = (state.s1Feedback && !state.s1ZoomModalOpen) ? `
+        <div class="mt-4 p-4 rounded-2xl border-2 flex items-start gap-3 ${
+          state.s1Feedback.type === 'success'
+            ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+            : state.s1Feedback.type === 'warning'
+            ? 'bg-amber-100 border-amber-400 text-amber-950'
+            : 'bg-rose-100 border-rose-400 text-rose-950'
+        }">
+          <span class="text-xl">${state.s1Feedback.type === 'success' ? '✅' : '⚠️'}</span>
+          <div class="flex-1">
+            <h5 class="font-black text-sm sm:text-base">${state.s1Feedback.title}</h5>
+            <p class="text-xs sm:text-sm font-bold mt-0.5">${state.s1Feedback.message}</p>
+          </div>
+        </div>
+      ` : '';
+
+      return `
+        <div class="space-y-4 sm:space-y-5">
+          ${taskCardHTML}
+          <div class="bg-white/95 backdrop-blur-md rounded-3xl p-4 sm:p-6 border-2 border-white shadow-[0_8px_0_rgb(203,213,225)]">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div class="flex items-center gap-2">
+                <span class="bg-indigo-500 text-white text-xs font-black px-3 py-1 rounded-xl border-b-2 border-indigo-700 shrink-0">
+                  1. ADIM
+                </span>
+                <h2 class="text-sm sm:text-lg font-black text-slate-800">
+                  Ana Sayı Doğrusunda Yakınlaştırmak İstediğin Aralığa Dokun! 🔍
+                </h2>
+              </div>
+              ${state.s1Pins.length > 0 ? `
+                <button
+                  type="button"
+                  onclick="clearS1Pins()"
+                  class="btn-3d flex items-center gap-1 text-xs font-extrabold text-rose-600 bg-rose-100 hover:bg-rose-200 px-3 py-1.5 rounded-xl border-b-2 border-rose-300"
+                >
+                  🗑️ Pinleri Temizle (${state.s1Pins.length})
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="relative pt-14 pb-12 px-4 sm:px-8 bg-gradient-to-b from-sky-50 to-indigo-50/70 rounded-2xl border-2 border-sky-200 overflow-x-auto">
+              <div class="relative w-full h-16 flex items-center" style="min-width: ${minWidthPx}px;">
+                <div class="w-full h-4 bg-gradient-to-b from-slate-300 via-slate-100 to-slate-400 rounded-full shadow-inner border border-slate-400 relative"></div>
+                ${intervalsHTML}
+                ${integerTicksHTML}
+                ${pinsHTML}
+              </div>
+            </div>
+
+            <div class="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-indigo-50/80 px-4 py-3 rounded-2xl border border-indigo-200">
+              <p class="text-xs sm:text-sm font-bold text-indigo-900 flex items-center gap-2">
+                <span>🔍 Yukarıdaki sayı doğrusunda istediğin iki tam sayı arasına dokunarak <strong>Seçilen Aralıktan Büyüyen Büyüteç Penceresini</strong> açabilirsin!</span>
+              </p>
+              <button
+                type="button"
+                onclick="openS1ZoomModal(${state.s1SelectedInterval}, this)"
+                class="btn-3d shrink-0 flex items-center gap-1.5 bg-amber-400 hover:bg-amber-300 text-amber-950 font-black text-xs px-4 py-2 rounded-xl border-b-4 border-amber-600 shadow-sm"
+              >
+                🔍 [${state.s1SelectedInterval}, ${state.s1SelectedInterval + 1}] Büyütecini Aç
+              </button>
+            </div>
+            ${feedbackHTML}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSection2HTML(integers) {
+      const minWidthPx = Math.max(290, (state.maxBound - state.minBound) * 38);
+      const anyPin = state.s2Lines.some(l => l.pin !== null);
+
+      const lasersHTML = state.showLaserGuide ? state.s2Lines.map(line => {
+        if (!line.pin) return '';
+        const leftPct = getPercentPos(line.pin.value);
+        const theme = colorMap[line.color] || colorMap.indigo;
+        return `
+          <div style="left: ${leftPct}%" class="absolute top-0 bottom-0 -translate-x-1/2 pointer-events-none z-20 flex flex-col items-center">
+            <div class="h-full w-0 border-l-2 border-dashed ${theme.laser}"></div>
+          </div>
+        `;
+      }).join('') : '';
+
+      const linesRowsHTML = state.s2Lines.map(line => {
+        const theme = colorMap[line.color] || colorMap.indigo;
+        const isActive = line.id === state.s2ActiveLineId;
+
+        const intervalsHTML = integers.slice(0, -1).map(intVal => {
+          const leftPct = getPercentPos(intVal);
+          const widthPct = 100 / (state.maxBound - state.minBound);
+          const isSelectedInterval = line.selectedInterval === intVal;
+
+          let subTicks = '';
+          if (isSelectedInterval) {
+            for (let idx = 0; idx < line.divisions - 1; idx++) {
+              const subPct = ((idx + 1) / line.divisions) * 100;
+              subTicks += `<span style="left: ${subPct}%" class="absolute top-1/2 -translate-y-1/2 w-0.5 h-4 bg-slate-700/70 pointer-events-none"></span>`;
+            }
+          }
+
+          return `
+            <button
+              type="button"
+              onclick="openS2IntervalModal('${line.id}', ${intVal}, this)"
+              style="left: ${leftPct}%; width: ${widthPct}%;"
+              class="absolute top-1/2 -translate-y-1/2 h-9 rounded-lg transition-all ${
+                isSelectedInterval ? `${theme.lightBg} ring-2 ${theme.border} z-10` : 'hover:bg-sky-200/40'
+              }"
+              title="[${intVal}, ${intVal + 1}] aralığını büyüteçte aç"
+            >
+              ${subTicks}
+            </button>
+          `;
+        }).join('');
+
+        const ticksHTML = integers.map(intVal => {
+          const leftPct = getPercentPos(intVal);
+          const isZero = intVal === 0;
+          return `
+            <div style="left: ${leftPct}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-20">
+              <div class="w-1 rounded-full ${isZero ? 'h-7 bg-rose-500' : 'h-5 bg-slate-700'}"></div>
+              <span class="mt-5 font-mono text-[10px] sm:text-[11px] font-black text-slate-700">${intVal}</span>
+            </div>
+          `;
+        }).join('');
+
+        const pinHTML = line.pin ? `
+          <div style="left: ${getPercentPos(line.pin.value)}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex flex-col items-center pointer-events-none">
+            <div class="-mt-10 px-2 sm:px-2.5 py-0.5 rounded-xl font-mono font-black text-[11px] sm:text-xs shadow-md whitespace-nowrap ${theme.badge}">
+              ${line.pin.label}
+            </div>
+            <div class="w-4 h-4 sm:w-5 sm:h-5 rounded-full ${theme.bg} border-2 border-white shadow-md"></div>
+          </div>
+        ` : '';
+
+        return `
+          <div
+            class="relative rounded-2xl p-3 sm:p-3.5 transition-all border-2 ${
+              isActive ? 'bg-white border-indigo-400 shadow-md' : 'bg-white/70 border-slate-200 hover:bg-white'
+            }"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-6">
+              <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span class="px-2.5 sm:px-3 py-1 rounded-xl text-xs font-black ${theme.badge}">
+                  ${line.name}
+                </span>
+                ${state.workMode === 'task' && line.targetFraction ? `
+                  <span class="text-xs font-extrabold bg-amber-100 text-amber-900 px-2.5 py-1 rounded-xl border border-amber-300">
+                    🎯 Hedef: ${line.targetFraction.num}/${line.targetFraction.den}
+                  </span>
+                ` : ''}
+                <button
+                  type="button"
+                  onclick="openS2IntervalModal('${line.id}', ${line.selectedInterval}, this)"
+                  class="text-[11px] sm:text-xs font-extrabold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-0.5 rounded-lg border border-indigo-200 flex items-center gap-1"
+                >
+                  🔍 [${line.selectedInterval}, ${line.selectedInterval + 1}] • ${line.divisions} parça
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2">
+                ${line.pin ? `
+                  <div class="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-300">
+                    <span class="text-[11px] sm:text-xs font-extrabold text-slate-600">Pin:</span>
+                    <span class="font-mono font-black text-xs sm:text-sm ${theme.text}">
+                      ${line.pin.label} (${line.pin.mixedLabel})
+                    </span>
+                    <button
+                      type="button"
+                      onclick="clearSingleS2Pin('${line.id}')"
+                      class="ml-1 text-rose-500 hover:text-rose-700 p-0.5 rounded-lg hover:bg-rose-100 transition-colors"
+                      title="Bu pini kaldır"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ` : `
+                  <span class="text-[11px] sm:text-xs font-bold text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200">
+                    Nokta seçilmedi
+                  </span>
+                `}
+
+                ${state.s2Lines.length > 2 ? `
+                  <button
+                    type="button"
+                    onclick="removeS2Line('${line.id}')"
+                    class="btn-3d bg-rose-100 hover:bg-rose-200 text-rose-700 px-2 py-1 rounded-xl border-b-2 border-rose-300 text-[11px] font-black flex items-center gap-1"
+                    title="Bu sayı doğrusunu kaldır"
+                  >
+                    🗑️ <span class="hidden sm:inline">Doğruyu Sil</span>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="relative h-12 flex items-center mx-2 sm:mx-4">
+              <div class="w-full h-3.5 bg-gradient-to-b from-slate-300 via-slate-100 to-slate-300 rounded-full border border-slate-400"></div>
+              ${intervalsHTML}
+              ${ticksHTML}
+              ${pinHTML}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const pinnedLines = state.s2Lines.filter(l => l.pin !== null);
+      const sortCardsHTML = pinnedLines.map(line => {
+        const isUsed = state.userSortedIds.includes(line.id);
+        const theme = colorMap[line.color] || colorMap.indigo;
+        return `
+          <button
+            type="button"
+            ${isUsed ? 'disabled' : ''}
+            onclick="addLineToSort('${line.id}')"
+            class="btn-3d px-4 py-2.5 rounded-2xl font-mono font-black text-sm flex items-center gap-2 ${
+              isUsed
+                ? 'bg-slate-200 text-slate-400 border-b-2 border-slate-300 opacity-50 cursor-not-allowed'
+                : `${theme.badge} shadow-sm`
+            }"
+          >
+            <span>${line.name}:</span>
+            <span class="bg-white/20 px-2 py-0.5 rounded-lg">${line.pin.label}</span>
+          </button>
+        `;
+      }).join('');
+
+      const sortSlotsHTML = pinnedLines.map((_, idx, arr) => {
+        const chosenId = state.userSortedIds[idx];
+        const chosenLine = state.s2Lines.find(l => l.id === chosenId);
+        return `
+          <div class="min-w-[110px] h-12 rounded-2xl border-2 border-dashed border-indigo-300 bg-white flex items-center justify-center px-3 font-mono font-black text-sm text-indigo-800">
+            ${chosenLine && chosenLine.pin ? chosenLine.pin.label : `${idx + 1}. Kesir`}
+          </div>
+          ${idx < arr.length - 1 ? `<span class="text-xl font-black text-pink-500">${state.sortOrderDir === 'asc' ? '&lt;' : '&gt;'}</span>` : ''}
+        `;
+      }).join('');
+
+      return `
+        <div class="space-y-4 sm:space-y-5">
+          <div class="bg-white/95 rounded-3xl p-4 sm:p-5 border-2 border-white shadow-[0_8px_0_rgb(203,213,225)]">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+              <div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="bg-pink-500 text-white text-xs font-black px-3 py-1 rounded-xl border-b-2 border-pink-700">
+                    ÇOKLU HİZALAMA (${state.s2Lines.length} / 5 DOĞRU)
+                  </span>
+                  <span class="text-xs font-extrabold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200">
+                    En az 2, en fazla 5 sayı doğrusu
+                  </span>
+                </div>
+                <h2 class="text-sm sm:text-lg font-black text-slate-800 mt-1">
+                  Alt Alta Hizalı Sayı Doğruları (Aralığa Dokun, Büyüteç O Aralıktan Büyüyerek Açılsın!)
+                </h2>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onclick="addS2Line()"
+                  ${state.s2Lines.length >= 5 ? 'disabled' : ''}
+                  class="btn-3d flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black border-b-4 ${
+                    state.s2Lines.length < 5
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-white border-emerald-700 shadow-sm'
+                      : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
+                  }"
+                >
+                  ➕ Sayı Doğrusu Ekle (${state.s2Lines.length}/5)
+                </button>
+
+                <button
+                  type="button"
+                  onclick="toggleLaserGuide()"
+                  class="btn-3d flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-extrabold border-b-4 ${
+                    state.showLaserGuide
+                      ? 'bg-indigo-500 text-white border-indigo-700'
+                      : 'bg-slate-200 text-slate-700 border-slate-400'
+                  }"
+                >
+                  👁️ Dikey Lazer: ${state.showLaserGuide ? 'Açık' : 'Kapalı'}
+                </button>
+
+                <button
+                  type="button"
+                  onclick="clearAllS2Pins()"
+                  ${!anyPin ? 'disabled' : ''}
+                  class="btn-3d flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-extrabold border-b-4 ${
+                    anyPin
+                      ? 'bg-rose-500 hover:bg-rose-400 text-white border-rose-700 shadow-sm'
+                      : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
+                  }"
+                >
+                  🗑️ Pinleri Temizle
+                </button>
+
+                ${state.workMode === 'task' ? `
+                  <button
+                    type="button"
+                    onclick="generateNewS2Task(true)"
+                    class="btn-3d flex items-center gap-1.5 bg-amber-400 text-amber-950 px-3.5 py-2 rounded-2xl text-xs font-black border-b-4 border-amber-600"
+                  >
+                    🔄 Yeni Görev Seti
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+
+            <div class="relative bg-gradient-to-b from-sky-50 via-white to-pink-50 rounded-3xl p-3 sm:p-6 border-2 border-sky-200 overflow-x-auto">
+              <div class="relative w-full space-y-5 sm:space-y-6" style="min-width: ${minWidthPx}px;">
+                ${lasersHTML}
+                ${linesRowsHTML}
+              </div>
+            </div>
+
+            ${state.s2Feedback && !state.s2ZoomModalOpen ? `
+              <div class="mt-4 p-3.5 rounded-2xl border-2 text-xs sm:text-sm font-bold flex items-center gap-2.5 ${
+                state.s2Feedback.type === 'success'
+                  ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                  : 'bg-amber-100 border-amber-400 text-amber-950'
+              }">
+                <span>✨ <strong>${state.s2Feedback.title}</strong> ${state.s2Feedback.message}</span>
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="bg-white/95 rounded-3xl p-5 border-2 border-white shadow-[0_8px_0_rgb(203,213,225)] space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span class="bg-amber-400 text-amber-950 text-xs font-black px-3 py-1 rounded-xl border-b-2 border-amber-600">
+                  KARŞILAŞTIRMA ARENASI
+                </span>
+                <h3 class="text-base sm:text-lg font-black text-slate-800 mt-1">
+                  Yukarıdaki Dikey Lazerlere Bakarak Kesirleri Sırala!
+                </h3>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick="setSortDir('asc')"
+                  class="btn-3d px-3.5 py-2 rounded-2xl text-xs font-black border-b-4 ${
+                    state.sortOrderDir === 'asc'
+                      ? 'bg-indigo-500 text-white border-indigo-700'
+                      : 'bg-slate-100 text-slate-700 border-slate-300'
+                  }"
+                >
+                  Küçükten Büyüğe (&lt;)
+                </button>
+                <button
+                  type="button"
+                  onclick="setSortDir('desc')"
+                  class="btn-3d px-3.5 py-2 rounded-2xl text-xs font-black border-b-4 ${
+                    state.sortOrderDir === 'desc'
+                      ? 'bg-pink-500 text-white border-pink-700'
+                      : 'bg-slate-100 text-slate-700 border-slate-300'
+                  }"
+                >
+                  Büyükten Küçüğe (&gt;)
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3">
+              ${sortCardsHTML || '<span class="text-xs font-bold text-slate-500">Henüz işaretlenmiş kesir yok. Yukarıdaki doğrulardan nokta seçin!</span>'}
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3 p-4 bg-sky-50 rounded-2xl border-2 border-sky-200">
+              ${sortSlotsHTML}
+              <div class="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick="resetSort()"
+                  class="btn-3d bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xs px-3.5 py-2.5 rounded-xl border-b-2 border-slate-400"
+                >
+                  Sıfırla
+                </button>
+                <button
+                  type="button"
+                  onclick="checkS2Sort()"
+                  class="btn-3d bg-emerald-500 hover:bg-emerald-400 text-white font-black text-xs px-5 py-2.5 rounded-xl border-b-4 border-emerald-700"
+                >
+                  Sıralamayı Kontrol Et
+                </button>
+              </div>
+            </div>
+
+            ${state.s2SortFeedback ? `
+              <div class="p-3.5 rounded-2xl border-2 text-xs sm:text-sm font-bold ${
+                state.s2SortFeedback.type === 'success'
+                  ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                  : 'bg-rose-100 border-rose-400 text-rose-950'
+              }">
+                ${state.s2SortFeedback.message}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderModals() {
+      const modalRoot = document.getElementById('modal-root');
+      let html = '';
+
+      // 1. Bölüm 1 Büyüteç Modalı
+      if (state.s1ZoomModalOpen) {
+        const divNums = [2, 3, 4, 5, 6, 8, 10];
+        const minW = Math.max(260, state.s1Divisions * 44);
+
+        let ticksHTML = '';
+        for (let idx = 0; idx <= state.s1Divisions; idx++) {
+          const leftPct = (idx / state.s1Divisions) * 100;
+          const isEndpoint = idx === 0 || idx === state.s1Divisions;
+          const isSelected = state.s1SelectedTick === idx;
+          const stepNumber = state.s1SelectedInterval < 0 ? state.s1Divisions - idx : idx;
+
+          ticksHTML += `
+            <div style="left: ${leftPct}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center">
+              <span class="-mt-10 mb-2 text-[10px] sm:text-[11px] font-mono font-extrabold px-1.5 sm:px-2 py-0.5 rounded-full whitespace-nowrap transition-all ${
+                isSelected ? 'bg-pink-500 text-white scale-110 shadow' : 'bg-slate-200/80 text-slate-600'
+              }">
+                ${stepNumber}. adım
+              </span>
+              <button
+                type="button"
+                onclick="selectS1Tick(${idx})"
+                class="btn-3d rounded-full flex items-center justify-center transition-all ${
+                  isSelected
+                    ? 'w-9 h-9 bg-gradient-to-br from-pink-400 to-rose-600 text-white border-4 border-white shadow-[0_0_0_4px_rgb(244,63,94)] scale-110 z-20'
+                    : isEndpoint
+                    ? 'w-7 h-7 bg-indigo-600 hover:bg-pink-500 text-white border-2 border-white shadow-md z-10'
+                    : 'w-6 h-6 sm:w-7 sm:h-7 bg-white hover:bg-pink-400 text-indigo-700 border-2 border-indigo-400 shadow-sm z-10'
+                }"
+              >
+                ${isSelected ? '✓' : ''}
+              </button>
+              ${isEndpoint ? `
+                <span class="mt-3 font-mono text-sm sm:text-lg font-black text-indigo-900 bg-indigo-100 px-2.5 sm:px-3 py-0.5 rounded-xl border border-indigo-300">
+                  ${idx === 0 ? state.s1SelectedInterval : state.s1SelectedInterval + 1}
+                </span>
+              ` : ''}
+            </div>
+          `;
+        }
+
+        const formHTML = state.s1SelectedTick !== null ? `
+          <form onsubmit="verifyS1Submission(event)" class="bg-white rounded-3xl p-4 sm:p-5 border-2 border-pink-300 shadow-[0_6px_0_rgb(249,168,212)] space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <span class="bg-pink-500 text-white text-xs font-black px-3 py-1 rounded-xl border-b-2 border-pink-700">
+                  SON ADIM
+                </span>
+                <h4 class="text-sm sm:text-base font-black text-slate-800">
+                  Seçtiğin Noktanın Kesir Değerini Yaz, Doğrulayınca Büyüteç Kapanıp İşaretlensin! ✍️
+                </h4>
+              </div>
+
+              <div class="flex items-center bg-pink-50 p-1 rounded-2xl border-2 border-pink-200">
+                <button
+                  type="button"
+                  onclick="setS1InputFormat('simple')"
+                  class="btn-3d px-3 py-1.5 rounded-xl text-xs font-extrabold ${
+                    state.inputFormat === 'simple' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800 hover:bg-pink-100'
+                  }"
+                >
+                  Basit / Bileşik Kesir
+                </button>
+                <button
+                  type="button"
+                  onclick="setS1InputFormat('mixed')"
+                  class="btn-3d px-3 py-1.5 rounded-xl text-xs font-extrabold ${
+                    state.inputFormat === 'mixed' ? 'bg-pink-500 text-white shadow-sm' : 'text-pink-800 hover:bg-pink-100'
+                  }"
+                >
+                  Tam Sayılı Kesir
+                </button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-center gap-4 py-3 bg-gradient-to-r from-sky-50 via-pink-50 to-amber-50 rounded-2xl border-2 border-slate-200">
+              ${state.inputFormat === 'simple' ? `
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onclick="toggleS1Sign('simple')"
+                    class="btn-3d w-12 h-12 rounded-2xl font-mono font-black text-2xl border-b-4 ${
+                      state.simpleSign === '-' ? 'bg-rose-500 text-white border-rose-700' : 'bg-emerald-500 text-white border-emerald-700'
+                    }"
+                  >
+                    ${state.simpleSign}
+                  </button>
+                  <div class="flex flex-col items-center gap-1.5">
+                    <input
+                      id="s1-simple-num"
+                      type="number"
+                      placeholder="Pay"
+                      value="${state.simpleNum}"
+                      class="w-24 h-11 text-center font-mono font-black text-lg bg-white text-slate-800 rounded-xl border-2 border-indigo-300 focus:outline-none focus:border-pink-500"
+                    />
+                    <div class="w-28 h-1.5 bg-slate-800 rounded-full"></div>
+                    <input
+                      id="s1-simple-den"
+                      type="number"
+                      placeholder="Payda"
+                      value="${state.simpleDen}"
+                      class="w-24 h-11 text-center font-mono font-black text-lg bg-white text-slate-800 rounded-xl border-2 border-indigo-300 focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+              ` : `
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onclick="toggleS1Sign('mixed')"
+                    class="btn-3d w-12 h-12 rounded-2xl font-mono font-black text-2xl border-b-4 ${
+                      state.mixedSign === '-' ? 'bg-rose-500 text-white border-rose-700' : 'bg-emerald-500 text-white border-emerald-700'
+                    }"
+                  >
+                    ${state.mixedSign}
+                  </button>
+                  <input
+                    id="s1-mixed-whole"
+                    type="number"
+                    placeholder="Tam"
+                    value="${state.mixedWhole}"
+                    class="w-20 h-14 text-center font-mono font-black text-xl bg-white text-slate-800 rounded-2xl border-2 border-amber-400 focus:outline-none focus:border-pink-500"
+                  />
+                  <div class="flex flex-col items-center gap-1.5">
+                    <input
+                      id="s1-mixed-num"
+                      type="number"
+                      placeholder="Pay"
+                      value="${state.mixedNum}"
+                      class="w-24 h-11 text-center font-mono font-black text-lg bg-white text-slate-800 rounded-xl border-2 border-indigo-300 focus:outline-none focus:border-pink-500"
+                    />
+                    <div class="w-28 h-1.5 bg-slate-800 rounded-full"></div>
+                    <input
+                      id="s1-mixed-den"
+                      type="number"
+                      placeholder="Payda"
+                      value="${state.mixedDen}"
+                      class="w-24 h-11 text-center font-mono font-black text-lg bg-white text-slate-800 rounded-xl border-2 border-indigo-300 focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+              `}
+
+              <button
+                type="submit"
+                class="btn-3d flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-sm px-6 py-4 rounded-2xl border-b-4 border-emerald-800 shadow-md"
+              >
+                ✅ Doğrula ve Ana Doğruya İşle!
+              </button>
+            </div>
+          </form>
+        ` : `
+          <div class="text-center py-4 bg-white/80 rounded-2xl border-2 border-dashed border-indigo-300 text-indigo-800 font-bold text-sm">
+            👆 Kesir yazmak için yukarıdaki büyüteç çubuğundaki yuvarlak noktalardan birine tıkla!
+          </div>
+        `;
+
+        const s1AnimClass = state.s1JustOpened ? 'magnify-modal-animate' : '';
+        state.s1JustOpened = false;
+
+        html += `
+          <div
+            style="transform-origin: ${state.zoomOrigin.x} ${state.zoomOrigin.y};"
+            class="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto ${s1AnimClass}"
+            onclick="closeS1ZoomModal()"
+          >
+            <div
+              onclick="event.stopPropagation()"
+              class="bg-gradient-to-br from-indigo-50 via-white to-pink-50 rounded-3xl max-w-4xl w-full p-4 sm:p-6 border-4 border-indigo-300 shadow-[0_12px_0_rgb(129,140,248),0_25px_50px_rgba(15,23,42,0.5)] space-y-4 sm:space-y-5 my-auto"
+            >
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-3.5 border-b-2 border-indigo-100 pb-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-400 text-amber-950 flex items-center justify-center border-b-4 border-amber-600 shadow-sm shrink-0 text-xl">
+                    🔍
+                  </div>
+                  <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-[11px] sm:text-xs font-black uppercase text-indigo-600">
+                        🔍 HASSAS BÜYÜTEÇ PENCERESİ
+                      </span>
+                      ${state.workMode === 'task' && state.s1TaskTarget ? `
+                        <span class="text-xs font-black bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full border border-amber-400">
+                          🎯 Hedef: ${state.s1TaskTarget.num}/${state.s1TaskTarget.den}
+                        </span>
+                      ` : ''}
+                    </div>
+                    <h3 class="text-base sm:text-xl font-black text-slate-800">
+                      [${state.s1SelectedInterval} ile ${state.s1SelectedInterval + 1}] Aralığı Yakınlaştırıldı
+                    </h3>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between md:justify-end gap-2">
+                  <div class="flex flex-wrap items-center gap-1.5 bg-white p-2 rounded-2xl border-2 border-indigo-200 shadow-sm">
+                    <span class="text-xs font-extrabold text-slate-700 px-1">Eş Parça:</span>
+                    <div class="flex flex-wrap items-center gap-1">
+                      ${divNums.map(num => `
+                        <button
+                          type="button"
+                          onclick="setS1Divisions(${num})"
+                          class="btn-3d w-8 h-8 sm:w-9 sm:h-9 rounded-xl font-mono font-black text-xs sm:text-sm border-b-4 ${
+                            state.s1Divisions === num
+                              ? 'bg-indigo-500 text-white border-indigo-800'
+                              : 'bg-slate-100 hover:bg-indigo-100 text-slate-700 border-slate-300'
+                          }"
+                        >
+                          ${num}
+                        </button>
+                      `).join('')}
+                      <input
+                        type="number"
+                        min="2"
+                        max="20"
+                        value="${state.s1Divisions}"
+                        onchange="setS1Divisions(this.value)"
+                        class="w-12 h-8 sm:h-9 text-center font-mono font-black text-xs sm:text-sm bg-indigo-50 text-indigo-800 rounded-xl border-2 border-indigo-300"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onclick="closeS1ZoomModal()"
+                    class="btn-3d bg-rose-500 hover:bg-rose-400 text-white font-black text-xs px-3.5 py-2.5 rounded-2xl border-b-4 border-rose-700 shrink-0"
+                  >
+                    Kapat ✕
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-extrabold border-2 ${
+                state.s1SelectedInterval < 0
+                  ? 'bg-rose-100/90 text-rose-800 border-rose-300'
+                  : 'bg-emerald-100/90 text-emerald-800 border-emerald-300'
+              }">
+                ${state.s1SelectedInterval < 0 ? `
+                  <div class="flex items-center gap-2">
+                    <span>⬅️ <strong>Negatif Bölge Kuralı:</strong> 0 sağ taraftadır! Parçaları <strong>${state.s1SelectedInterval + 1}</strong> noktasından <strong>${state.s1SelectedInterval}</strong> noktasına (SOLA DOĞRU) saymalısın!</span>
+                  </div>
+                ` : `
+                  <div class="flex items-center gap-2">
+                    <span>➡️ <strong>Pozitif Bölge Kuralı:</strong> 0 sol taraftadır! Parçaları <strong>${state.s1SelectedInterval}</strong> noktasından <strong>${state.s1SelectedInterval + 1}</strong> noktasına (SAĞA DOĞRU) saymalısın!</span>
+                  </div>
+                `}
+                <span class="font-mono font-black bg-white/80 px-2.5 py-1 rounded-xl self-start sm:self-auto shrink-0">
+                  Payda = ${state.s1Divisions}
+                </span>
+              </div>
+
+              <div class="relative py-12 px-5 sm:px-12 bg-gradient-to-b from-white to-indigo-50/60 rounded-3xl border-2 border-indigo-200 shadow-inner overflow-x-auto">
+                <div class="relative w-full h-16 flex items-center" style="min-width: ${minW}px;">
+                  <div class="w-full h-5 bg-gradient-to-b from-indigo-200 via-white to-indigo-300 rounded-full border-2 border-indigo-300 shadow-inner"></div>
+                  ${ticksHTML}
+                </div>
+              </div>
+
+              ${formHTML}
+
+              ${state.s1Feedback ? `
+                <div class="p-4 rounded-2xl border-2 flex items-start gap-3 ${
+                  state.s1Feedback.type === 'success'
+                    ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                    : state.s1Feedback.type === 'warning'
+                    ? 'bg-amber-100 border-amber-400 text-amber-950'
+                    : 'bg-rose-100 border-rose-400 text-rose-950'
+                }">
+                  <span class="text-xl">${state.s1Feedback.type === 'success' ? '✅' : '⚠️'}</span>
+                  <div class="flex-1">
+                    <h5 class="font-black text-sm sm:text-base">${state.s1Feedback.title}</h5>
+                    <p class="text-xs sm:text-sm font-bold mt-0.5">${state.s1Feedback.message}</p>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      // 2. Bölüm 2 Büyüteç Modalı
+      if (state.s2ZoomModalOpen) {
+        const activeLine = state.s2Lines.find(l => l.id === state.s2ActiveLineId) || state.s2Lines[0];
+        if (activeLine) {
+          const divNums = [2, 3, 4, 5, 6, 8, 10];
+          const minW = Math.max(260, activeLine.divisions * 44);
+
+          let ticksHTML = '';
+          for (let idx = 0; idx <= activeLine.divisions; idx++) {
+            const leftPct = (idx / activeLine.divisions) * 100;
+            const isEndpoint = idx === 0 || idx === activeLine.divisions;
+            const info = getTickExactInfo(activeLine.selectedInterval, activeLine.divisions, idx);
+            const isPinnedHere = activeLine.pin && Math.abs(activeLine.pin.value - info.value) < 0.0001;
+
+            ticksHTML += `
+              <div style="left: ${leftPct}%" class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center">
+                <span class="-mt-9 mb-1.5 font-mono text-[10px] sm:text-xs font-black text-slate-700 bg-slate-100 px-1.5 sm:px-2 py-0.5 rounded-lg border border-slate-200 whitespace-nowrap">
+                  ${info.label}
+                </span>
+                <button
+                  type="button"
+                  onclick="selectAndPinS2Tick(${idx})"
+                  class="btn-3d rounded-full flex items-center justify-center transition-all ${
+                    isPinnedHere
+                      ? 'w-9 h-9 bg-gradient-to-br from-pink-500 to-rose-600 text-white border-4 border-white shadow-[0_0_0_3px_rgb(244,63,94)] scale-110'
+                      : 'w-7 h-7 sm:w-8 sm:h-8 bg-white hover:bg-indigo-500 hover:text-white border-2 border-indigo-500 shadow-sm'
+                  }"
+                >
+                  ${isPinnedHere ? '✓' : ''}
+                </button>
+                ${isEndpoint ? `
+                  <span class="mt-2.5 font-mono text-xs sm:text-sm font-black text-indigo-900 bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-300">
+                    ${idx === 0 ? activeLine.selectedInterval : activeLine.selectedInterval + 1}
+                  </span>
+                ` : ''}
+              </div>
+            `;
+          }
+
+          const s2AnimClass = state.s2JustOpened ? 'magnify-modal-animate' : '';
+          state.s2JustOpened = false;
+
+          html += `
+            <div
+              style="transform-origin: ${state.zoomOrigin.x} ${state.zoomOrigin.y};"
+              class="fixed inset-0 z-50 bg-slate-900/55 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-6 overflow-y-auto ${s2AnimClass}"
+              onclick="closeS2ZoomModal()"
+            >
+              <div
+                onclick="event.stopPropagation()"
+                class="bg-gradient-to-br from-indigo-50 via-white to-pink-50 rounded-3xl max-w-4xl w-full p-4 sm:p-6 border-4 border-indigo-300 shadow-[0_12px_0_rgb(129,140,248),0_25px_50px_rgba(15,23,42,0.5)] space-y-4 my-auto"
+              >
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b-2 border-indigo-100 pb-3.5">
+                  <div class="flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-2xl bg-indigo-500 text-white flex items-center justify-center border-b-4 border-indigo-700 shrink-0 text-xl">
+                      🔍
+                    </div>
+                    <div>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-[11px] sm:text-xs font-black text-indigo-600 uppercase">
+                          🔍 BÜYÜTEÇ PENCERESİ (${activeLine.name})
+                        </span>
+                        ${state.workMode === 'task' && activeLine.targetFraction ? `
+                          <span class="text-xs font-extrabold bg-amber-200 text-amber-950 px-2.5 py-0.5 rounded-full border border-amber-400">
+                            🎯 Hedef: ${activeLine.targetFraction.num}/${activeLine.targetFraction.den}
+                          </span>
+                        ` : ''}
+                      </div>
+                      <h3 class="text-sm sm:text-lg font-black text-slate-800">
+                        [${activeLine.selectedInterval} ile ${activeLine.selectedInterval + 1}] Aralığında Noktaya Dokununca Otomatik İşaretlenip Kapanır!
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap items-center justify-between md:justify-end gap-2">
+                    <div class="flex flex-wrap items-center gap-1.5 bg-white p-2 rounded-2xl border-2 border-indigo-200">
+                      <span class="text-xs font-extrabold text-slate-600 px-1">Eş Parça:</span>
+                      ${divNums.map(n => `
+                        <button
+                          type="button"
+                          onclick="changeS2Divisions(${n})"
+                          class="btn-3d w-8 h-8 rounded-xl font-mono font-black text-xs border-b-2 ${
+                            activeLine.divisions === n
+                              ? 'bg-indigo-500 text-white border-indigo-800'
+                              : 'bg-slate-100 text-slate-700 border-slate-300'
+                          }"
+                        >
+                          ${n}
+                        </button>
+                      `).join('')}
+                    </div>
+
+                    <button
+                      type="button"
+                      onclick="closeS2ZoomModal()"
+                      class="btn-3d bg-rose-500 hover:bg-rose-400 text-white font-black text-xs px-3.5 py-2.5 rounded-2xl border-b-4 border-rose-700 shrink-0"
+                    >
+                      Kapat ✕
+                    </button>
+                  </div>
+                </div>
+
+                <div class="relative py-12 px-5 sm:px-12 bg-white rounded-2xl border-2 border-indigo-200 shadow-inner overflow-x-auto">
+                  <div class="relative w-full h-16 flex items-center" style="min-width: ${minW}px;">
+                    <div class="w-full h-4 bg-gradient-to-b from-indigo-200 via-white to-indigo-300 rounded-full border-2 border-indigo-300"></div>
+                    ${ticksHTML}
+                  </div>
+                </div>
+
+                ${state.s2Feedback ? `
+                  <div class="p-3.5 rounded-2xl border-2 text-xs sm:text-sm font-bold flex items-center gap-2.5 ${
+                    state.s2Feedback.type === 'success'
+                      ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
+                      : 'bg-amber-100 border-amber-400 text-amber-950'
+                  }">
+                    <span>✨ <strong>${state.s2Feedback.title}</strong> ${state.s2Feedback.message}</span>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      // 3. İpucu Rehber Modalı
+      if (state.showGuideModal) {
+        html += `
+          <div class="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" onclick="setGuideModal(false)">
+            <div class="bg-white rounded-3xl max-w-md w-full p-6 border-4 border-indigo-300 shadow-2xl space-y-4" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-between">
+                <h3 class="text-lg font-black text-indigo-900 flex items-center gap-2">
+                  ✨ Hızlı Laboratuvar Rehberi
+                </h3>
+                <button
+                  type="button"
+                  onclick="setGuideModal(false)"
+                  class="btn-3d bg-rose-100 text-rose-700 font-black px-3 py-1 rounded-xl text-xs"
+                >
+                  Kapat ✕
+                </button>
+              </div>
+              <ul class="space-y-2.5 text-xs sm:text-sm font-bold text-slate-700">
+                <li class="p-3 bg-sky-50 rounded-2xl border border-sky-200">
+                  🔍 <strong>1. Büyüteç (Zoom):</strong> Ana sayı doğrusunda iki tam sayı arasına tıkladığında o aralık kendi içinden büyüyerek dev büyüteç penceresinde açılır.
+                </li>
+                <li class="p-3 bg-rose-50 rounded-2xl border border-rose-200">
+                  ⬅️ <strong>2. Negatif Sayılar:</strong> Negatif bölgede parçaları her zaman <strong>0'dan SOLA doğru</strong> saymalısın!
+                </li>
+                <li class="p-3 bg-emerald-50 rounded-2xl border border-emerald-200">
+                  📍 <strong>3. Çoklu Karşılaştırma (2-5 Doğru):</strong> Sayı doğrusunda <strong>sağdaki sayı</strong> her zaman <strong>soldaki sayıdan büyüktür</strong>.
+                </li>
+              </ul>
+            </div>
+          </div>
+        `;
+      }
+
+      modalRoot.innerHTML = html;
+    }
+
+    // Başlangıçta Çalıştır
+    window.onload = function () {
+      initFloatingSymbols();
+      renderApp();
+    };
+  </script>
+</body>
+</html>
